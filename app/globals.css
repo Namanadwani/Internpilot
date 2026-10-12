@@ -1,0 +1,33 @@
+/* Site-wide styles for InternPilot.
+
+   The single @import line below switches on Tailwind. Tailwind works by
+   scanning our files for class names (like "rounded-xl" or "text-slate-600")
+   and generating only the CSS that is actually used. */
+
+@import "tailwindcss";
+
+/* Our brand colours, defined in ONE place.
+   Change a value here and every screen updates to match.
+   Use them in components as e.g. bg-brand-600, text-brand-700, border-brand-200. */
+@theme {
+  --color-brand-50: #eff4ff;
+  --color-brand-100: #dbe6fe;
+  --color-brand-200: #bfd3fe;
+  --color-brand-300: #93b4fd;
+  --color-brand-400: #608ffa;
+  --color-brand-500: #3b6bf6;
+  --color-brand-600: #2551eb;
+  --color-brand-700: #1d3ed8;
+  --color-brand-800: #1e35af;
+  --color-brand-900: #1e328a;
+}
+
+/* Small defaults for the whole site. */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #ffffff;
+  color: #1e293b; /* slate-800 */
+}
