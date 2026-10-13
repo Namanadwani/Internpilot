@@ -1,8 +1,11 @@
 # InternPilot — project notes
 
-Last updated: 13 October 2026 (Stages 3 and 4 written — resume upload and feedback)
-Stage 1 and the build are verified. Stages 2–4 are code complete and
-`npm run build` passes; **nothing has been exercised in a browser yet**.
+Last updated: 13 October 2026 (Stage 5 — the job-board feeds are now verified
+against the live boards)
+Stage 1, the build, and **Stage 5's feeds** are verified. Stages 2–5 and the
+delete button are code complete and `npm run build` passes, but **nothing has
+been exercised in a browser yet** — no sign-in, upload, analysis, download or
+delete has ever been clicked through.
 
 This file is the handover note for the project. If you open this repo in a new
 session, or come back to it in a month, read this first.
@@ -16,7 +19,7 @@ able to:
 
 1. Upload a resume. ✅ built
 2. Get feedback on it, and find out which fields fit them best. ✅ built
-3. See real internships matched to them, each with a match score. ⬜ next
+3. See real internships matched to them, each with a match score. ✅ built
 4. Get a tailored application email, approve it, and send it from their own
    Gmail. ⬜ later
 5. Track the applications they have made. ⬜ later
@@ -74,8 +77,59 @@ Other commands:
 ```bash
 npm run build   # makes a production version — run this before deploying
 npm start       # runs the production version made by the command above
+npm run sync    # fetches internships from the company job boards (Stage 5)
+npm run probe   # describes each company feed. Reads only, writes nothing
 npx prisma studio   # a visual browser for the database tables — very useful
 ```
+
+`npm run sync` needs the network and hits six company job boards. Run it before
+expecting `/internships` to show anything, and again whenever you want fresh
+listings. It prints one line per company saying how many internships it found, so
+a wrong company token is obvious straight away.
+
+`npm run probe` is the diagnostic beside it. It reads the same feeds but writes
+nothing to the database, and reports what each one actually returned: how many
+listings, how many arrived **with a real title**, and a few sample titles. Use it
+whenever a company's sync line says `0 internships`. The sync cannot tell you
+whether that board has no internships or whether our reader is looking at the
+wrong field; the probe can. **Editing the company list at the top of the probe is
+expected** — it is a scratchpad for trying tokens out.
+
+---
+
+## Git
+
+The repository was initialised on 13 October 2026. Everything through Stage 4 is
+in the first commit:
+
+```
+4140ad1  Add InternPilot stages 1-4: landing, consent, Google sign-in,
+         resume upload, feedback and file download
+```
+
+47 files, 6072 lines.
+
+The habit from here is one commit per stage:
+
+```bash
+git add -A && git status --short    # look at what you are about to commit
+git commit -m "what you changed"
+```
+
+**What is NOT in git, and why it matters:**
+
+| Not committed | Why | Consequence |
+| --- | --- | --- |
+| `.env`, `.env.local` | They hold real keys | Clone the repo elsewhere and you must fetch the Google values and Anthropic key again |
+| `prisma/dev.db` | It holds real student data | **The database and every uploaded resume are not backed up by committing.** Git is not a backup for your data, only for your code |
+| `node_modules/` | Rebuilt by `npm install` | — |
+
+To restore the database on a new machine, run
+`npx prisma migrate dev --name init`. That rebuilds the empty tables. The rows
+themselves — accounts, resumes, feedback — exist only in the `dev.db` file on
+this computer. **Copy that file somewhere safe if it starts holding anything you
+would be upset to lose.** Proper backups belong with the hosted database when
+this is deployed.
 
 ---
 
@@ -133,8 +187,10 @@ internpilot/
 │   ├── consent/page.js        Consent screen            → /consent
 │   ├── signin/page.js         Sign-in screen            → /signin
 │   ├── account/page.js        Signed-in page            → /account
+│   ├── account/actions.js     Deletes the account when the student asks
 │   ├── resume/page.js         Upload your resume        → /resume
 │   ├── results/page.js        Your feedback             → /results
+│   ├── internships/page.js    Matched internships       → /internships
 │   ├── terms/page.js          Terms (placeholder)       → /terms
 │   ├── privacy/page.js        Privacy (placeholder)     → /privacy
 │   └── api/
@@ -153,6 +209,8 @@ internpilot/
 │   ├── ResumeUploadForm.js    The file picker
 │   ├── RunAnalysisButton.js   "Get my feedback"
 │   ├── AnalysisResult.js      Draws the feedback
+│   ├── InternshipCard.js      One internship, with its score and reasons
+│   ├── DeleteConfirm.js       The two-step delete button
 │   ├── DatabaseNotice.js      Friendly message when the database is not ready
 │   └── LegalNotice.js         The lawyer-review warning
 ├── lib/
@@ -162,7 +220,14 @@ internpilot/
 │   ├── session.js             "Who is signed in?" — never throws
 │   ├── require-consent.js     The signed-in-and-permitted gate
 │   ├── resume-text.js         PDF/DOCX → plain text
-│   └── ai.js                  The resume feedback prompt. SERVER ONLY
+│   ├── ai.js                  The resume feedback prompt. SERVER ONLY
+│   ├── stored-lists.js        JSON text → real array (shared by two pages)
+│   ├── companies.js           Which companies we follow. Edit this to add one
+│   ├── job-boards.js          Reads Greenhouse, Lever and Ashby feeds
+│   └── matching.js            Scores an internship against a resume
+├── scripts/
+│   ├── sync-internships.mjs   Fetches the feeds and fills the cache
+│   └── probe-boards.mjs       Describes each feed. Reads only, writes nothing
 ├── prisma/
 │   ├── schema.prisma          The database tables
 │   └── migrations/            The recipe for building them (committed)
@@ -252,6 +317,65 @@ Useful habits:
 - [x] API failures are translated into sentences a student can act on (bad key,
       rate limit, no internet, unknown model) instead of a stack trace.
 
+### Deleting your account (built)
+
+- [x] A **Delete your account** button at the bottom of `/account`, in its own
+      red-bordered box, deliberately nowhere near "Log out".
+- [x] **Two steps.** The first click only reveals a panel naming what would be
+      lost; nothing is destroyed until a second, differently-worded button is
+      pressed. A panel that names the losses, rather than an "Are you sure?"
+      popup that gets dismissed by reflex.
+- [x] Deletes the account, the consent record, the resume **including the stored
+      file bytes**, all the feedback, the Google account link and the sessions —
+      in one database statement, via the `onDelete: Cascade` rules.
+- [x] **Runs SQLite `VACUUM` afterwards.** Deleting a row does not erase its
+      bytes from the file on disk; it marks the space as reusable. Vacuuming
+      rewrites the file without those freed pages, which matters when the thing
+      deleted is somebody's resume.
+- [x] Signs the student out, sends them home, and clears the consent answers
+      from their browser. The cookie-banner choice is left alone — it belongs to
+      the device, not the account.
+- [x] The panel says plainly what the button **cannot** do: undo an email
+      already sent to an employer, or remove InternPilot from the student's
+      Google account (that needs `myaccount.google.com/permissions`).
+
+### Stage 5 — matching internships (built)
+
+- [x] `/internships` — real internships from company job boards, ordered by how
+      well they suit the student, each with a match score **and the reasons
+      behind it**.
+- [x] **Company job boards, not an API.** Greenhouse, Lever and Ashby all publish
+      public feeds, so there is no key, no rate limit and nothing to pay for.
+- [x] `lib/companies.js` holds the list. **Adding a company is one line** — pick
+      the board type, copy the token out of the company's job-board address.
+- [x] `lib/job-boards.js` has one small reader per board type. Three different
+      JSON shapes go in, one shared shape comes out, so nothing downstream needs
+      to know which board a listing came from.
+- [x] `npm run sync` fetches every board and refreshes the cache, printing one
+      line per company so a wrong token is obvious immediately.
+- [x] **Only internship-titled listings are kept.** The filter uses word
+      boundaries, because a plain `includes("intern")` also matches "Internal
+      Audit" and "International Sales".
+- [x] `lastSeenAt` marks each listing on every sync; anything not seen in the
+      latest run is deleted, so filled or withdrawn internships disappear.
+- [x] The score is **explainable**: it counts shared words between the resume and
+      the listing, best-fit field matches, and how recently the listing was
+      posted. Every score shows its working. A bare number would invite trust it
+      has not earned.
+- [x] Every card links to **the company's own page**. InternPilot never applies
+      on a student's behalf.
+- [x] If a student has no feedback yet, listings appear unscored with a prompt,
+      rather than everyone seeing "0% match" and assuming the app is broken.
+- [x] **Every company in `lib/companies.js` was checked against its live feed on
+      13 October 2026** with `npm run probe`. Five Greenhouse boards (Stripe,
+      Databricks, Robinhood, Coinbase, Figma) and one Ashby board (OpenAI) all
+      answered correctly. That run stored **85 internships**.
+- [x] The Greenhouse and Ashby readers are therefore **proven against real data**,
+      not written from memory: every listing came back with a title, and Ashby's
+      raw field names matched the ones the reader uses. **The Lever reader has
+      never run once** — every Lever company we tried failed before parsing — so
+      it stays marked unproven in the file, and no Lever company is configured.
+
 ### Notes on decisions made
 
 - **Consent before sign-in.** The consent screen has to come first, because we
@@ -293,57 +417,88 @@ Useful habits:
   means there is no URL to tamper with. A `/api/resume/download?id=...` route
   would have needed an explicit ownership check on every request, and that is
   exactly the kind of check that gets forgotten.
+- **Board text is decoded before its tags are stripped, not after.** The live
+  feeds carry HTML entities even inside plain titles — Coinbase really does
+  advertise an "Accounting Manager, GL Operations &amp; Intercompany". Decoding
+  first also fixes the opposite case, where a board sends escaped HTML and the
+  tags themselves arrive as `&lt;p&gt;`: decode, then strip, and they vanish.
+  Strip first and the student's screen shows the literal characters `<p>`. The
+  `&amp;` replacement is deliberately last, so a doubly escaped `&amp;lt;`
+  becomes `&lt;` rather than an invented `<`.
+- **Freshness is measured from `first_published`, not `updated_at`.** A listing
+  the employer edited yesterday but opened five months ago is not a new opening,
+  and a scoring rule that calls it "posted 1 day ago" is simply wrong. This was
+  caught only because the probe printed the real field list.
+- **The sync's listing count is a lie-detector, and it is why the probe exists.**
+  "0 internships (808 listings on the board)" and "✗ FAILED" look nothing alike,
+  and that difference is the whole point: it separated a board that genuinely has
+  no interns (OpenAI) from a token that does not exist (Plaid, Benchling, Uber,
+  Brex, Mistral — all 404) in a single run. Keep printing per-company lines.
 
 ---
 
 ## What is next
 
-**First, before anything else: deleting your data.** Promised in the privacy
-policy, still not built, and now more urgent because we hold the uploaded files
-themselves. It is small: a button on `/account` that deletes the `User` row, and
-the existing `onDelete: Cascade` rules take the consent record, the resume, the
-stored file and all the feedback with it. Then change the privacy policy to say
-what actually happens.
+*(Stage 5 is built — see "What is finished" above. The one deviation from the
+plan: there is no `CompanyBoard` table. With six companies, a list in
+`lib/companies.js` that you can read and edit in one place beats a table you need
+a tool to change. If students ever choose which companies they follow, that is
+the moment it becomes a real table.)*
 
-**Stage 5 — matching internships.** Not started. The one real question to settle
-before writing code:
+**Stage 6 — the application email.** It can only ever *draft* an email for the
+student to send themselves; sending as them needs Google's verification plus a
+paid security assessment. The resume file stored by Stage 3b is what gets
+attached.
 
-> **Where do the internships come from?**
->
-> - **A curated list we write ourselves.** Simple, free, no API keys, works
->   today. But someone has to keep it up to date, and it will not scale.
-> - **A jobs API** (Adzuna, Jooble, Remotive and others offer free tiers).
->   Real, live listings. But it needs a key, has rate limits, and the quality of
->   results varies a lot.
-> - **Company job boards** (Greenhouse, Lever, Ashby all publish feeds).
->   High quality, aimed at exactly the sort of company that hires interns. More
->   work to gather, because each company is a separate feed.
->
-> A reasonable path: start with a curated list of ~30 internships so the whole
-> flow works end to end, then swap the source for an API once the matching is
-> proven. The matching code should not care where the list came from.
+Plan, roughly: a `Draft` table holding subject and body; `lib/email-draft.js`
+producing a first draft from the resume feedback and a chosen internship; an
+approve-and-edit screen where **nothing is sent and no address is filled in until
+the student acts**; and a "copy this" or `mailto:` hand-off rather than sending
+on their behalf. The hard limits at the top of this file rule out anything
+automatic.
 
-The best-fit fields stored by Stage 4 are what the match score will be built on.
-
-Later stages: drafting an email for approval, and the application tracker.
+**Stage 7 — the application tracker.** Which internships the student applied to,
+when, and what came back.
 
 **Known gaps to close before this is public:**
 
-- The Terms and Privacy pages are placeholder text and **must** be reviewed by a
-  lawyer. Once the site is on a public URL this stops being a placeholder
+- ~~The five companies in `lib/companies.js` are unverified guesses.~~ **Closed
+  13 October 2026.** All twelve candidates were checked against their live feeds
+  with `npm run probe`. Five Greenhouse boards and one Ashby board work; five
+  tokens (`plaid`, `benchling`, `uber`, `brex`, `mistral`) turned out not to
+  exist and were dropped. `palantir` timed out instead of 404ing, so it may be
+  real — it is the one worth retrying if you want more companies. **This is
+  seasonal work:** a board with 0 internships today may have 30 in February, so
+  re-run the probe when internship season opens.
+- **The Lever reader has never once run.** No Lever company is configured,
+  because all three we tried failed before any parsing happened. It is
+  correct-looking code that has never seen a real Lever reply, so it may well be
+  wrong. If you add a Lever company, probe it first — and remember a format
+  mismatch shows up as *zero internships*, not as an error.
+- **Greenhouse and Ashby are proven as of 13 October 2026, but job boards
+  change.** If a company that used to report internships suddenly reports 0, run
+  `npm run probe` before concluding it stopped hiring: the count of listings that
+  arrived with a title is how a drifted format announces itself.
+- **The match score counts words.** It does not understand meaning. "Data" and
+  "analytics" are unrelated to it. This is why every score shows its reasons —
+  but do not describe it to students as anything cleverer than it is.
+- **The Terms and Privacy pages are placeholder text and must be reviewed by a
+  lawyer.** Once the site is on a public URL this stops being a placeholder
   problem and becomes a real one.
-- **No account deletion, and nothing that deletes a resume.** The privacy policy
-  promises it. This is the most important missing piece — and it got more
-  important when we started keeping the uploaded files, because the database now
-  holds personal documents rather than just text. **Build this next.**
+- **Deleting is built; exporting is not.** A student can now delete everything,
+  which is what the privacy policy promises. Still missing is the right to *take
+  a copy* — there is no way to download your data before deleting it. The privacy
+  policy must either promise that and have it built, or not promise it.
 - **The model name in `lib/ai.js` is a guess.** It was written without access to
   the Anthropic documentation. If the feedback fails with a "model not found"
   message, set `ANTHROPIC_MODEL` in `.env.local` to a model your account can
   reach. The error message says exactly this.
-- Nothing is committed to git yet — see below.
-- 5 npm vulnerabilities (4 high) reported by `npm audit` after adding Auth.js
-  and Prisma. **Never run `npm audit fix --force`** — `--force` jumps major
-  versions and will break things. Deal with these deliberately, one at a time.
+- 8 npm vulnerabilities (4 moderate, 4 high) reported by `npm audit` after
+  Stages 3 and 4 added `unpdf`, `mammoth` and the Anthropic SDK. The count has
+  risen as dependencies were added and has never been investigated in detail —
+  run `npm audit` to see the list. **Never run `npm audit fix --force`** —
+  `--force` jumps major versions and will break things. Deal with these
+  deliberately, one at a time.
 
 ---
 
@@ -363,17 +518,24 @@ Later stages: drafting an email for approval, and the application tracker.
 
 | Stage | What it added | Status |
 | --- | --- | --- |
-| 1 | Landing page, cookie banner, consent screen, legal placeholders | Built, verified, **not committed** |
+| 1 | Landing page, cookie banner, consent screen, legal placeholders | Built, verified |
 | 2 | Google sign-in, database, `/account`, consent stored server-side | Written, **not verified end to end** |
 | 3 | Resume upload: PDF/DOCX → text, consent gate, one per account | Written, builds clean |
 | 4 | Resume feedback from a Claude model, best-fit fields | Written, builds clean |
 | 3b | Resume file itself is now kept, plus a download route | Written, builds clean |
+| 4b | Delete your account, with VACUUM and a two-step confirm | Written, builds clean |
+| 5 | Internships from company job boards, with explainable match scores | Written, **feeds verified 13 Oct 2026** |
 
-**A note on the migration names.** There are two migrations: `init` (Stage 2) and
-`store_resume_file`. The second one is named after the last thing added, but it
-actually created the `Resume` **and** `Analysis` tables as well — Stages 3 and 4
-were never migrated separately, so `store_resume_file` did all of it. The name is
-only a label and does not affect anything. **Do not rename the folder**: Prisma
+All of the above through Stage 4 is in commit `4140ad1`. Nothing has been run in
+a browser yet. Stage 5 and the delete button — including the probe, the company
+list and these notes — are written, their feeds verified, and committed
+separately from `4140ad1`.
+
+**A note on the migration names.** There are three migrations: `init` (Stage 2),
+`store_resume_file` (Stage 3b) and `add_internships` (Stage 5). `store_resume_file`
+is named after the last thing added, but it actually created the `Resume` **and**
+`Analysis` tables as well — Stages 3 and 4 were never migrated separately, so it
+did all of it. The name is only a label and does not affect anything. **Do not rename the folder**: Prisma
 matches folder names against its own records, and renaming one that has already
 been applied makes it think the migration is missing and offer to reset the
 database.

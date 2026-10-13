@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "sync": "node --env-file=.env scripts/sync-internships.mjs",
+    "probe": "node scripts/probe-boards.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

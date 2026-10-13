@@ -132,6 +132,15 @@ export default function PrivacyPage() {
             take a copy, and withdraw permission — plus the email address to use
             and how quickly we must reply.]
           </p>
+          <p className="mt-2 leading-relaxed text-slate-600">
+            [PLACEHOLDER — the account page now has a button that deletes the
+            account, the resume, the uploaded file and all the feedback
+            immediately, with no copy kept. This section must describe that
+            honestly, and must also cover the rights the button does{" "}
+            <strong>not</strong> satisfy — such as being given a copy of your
+            data before deleting it, or correcting something rather than
+            removing it.]
+          </p>
         </section>
 
         <section>

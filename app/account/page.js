@@ -5,6 +5,7 @@ import { getDatabaseStatus } from "@/lib/db-status";
 import { prisma } from "@/lib/db";
 import { SignOutButton } from "@/components/AuthButtons";
 import SavePendingConsent from "@/components/SavePendingConsent";
+import DeleteConfirm from "@/components/DeleteConfirm";
 
 export const metadata = {
   title: "Your account — InternPilot",
@@ -198,6 +199,22 @@ export default async function AccountPage() {
       <p className="mt-6 text-xs text-slate-400">
         Signed in with Google. Your password was never shared with InternPilot.
       </p>
+
+      {/* Deliberately at the very bottom, in its own bordered box, well away
+          from "Log out" — the two must never be neighbours. */}
+      <div className="mt-12 rounded-2xl border-2 border-red-200 p-6">
+        <h2 className="text-lg font-semibold text-red-900">
+          Delete your account
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600">
+          This removes your account, your resume, the file you uploaded, and all
+          the feedback written about it. There is no copy kept anywhere, and it
+          cannot be undone.
+        </p>
+        <div className="mt-5">
+          <DeleteConfirm />
+        </div>
+      </div>
     </div>
   );
 }

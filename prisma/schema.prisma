@@ -142,3 +142,31 @@ model Analysis {
 
   resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
 }
+
+// A cached internship listing, gathered from a company's public job board.
+//
+// This is a CACHE, not the source of truth — the company's own feed is. A row is
+// here because we fetched it, and `lastSeenAt` is what lets the sync script tell
+// "still advertised" apart from "taken down": anything not seen during the most
+// recent run gets deleted.
+model Internship {
+  id String @id @default(cuid())
+
+  // Where it came from. externalId is the company's own id for the listing.
+  boardType  String // "greenhouse", "lever" or "ashby"
+  boardToken String // the company's token in its feed address, e.g. "stripe"
+  externalId String
+
+  title       String
+  company     String
+  location    String?
+  url         String // the company's own page — where the student actually applies
+  description String? // plain text, used only for matching
+  postedAt    DateTime?
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  // The same listing must never be stored twice.
+  @@unique([boardType, boardToken, externalId])
+}

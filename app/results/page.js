@@ -4,24 +4,13 @@ import { prisma } from "@/lib/db";
 import { getDatabaseStatus } from "@/lib/db-status";
 import { requireResumePermission } from "@/lib/require-consent";
 import DatabaseNotice from "@/components/DatabaseNotice";
+import { parseStoredList } from "@/lib/stored-lists";
 import AnalysisResult from "@/components/AnalysisResult";
 import RunAnalysisButton from "@/components/RunAnalysisButton";
 
 export const metadata = {
   title: "Your feedback — InternPilot",
 };
-
-// SQLite stores our three lists as JSON text (see prisma/schema.prisma).
-// This turns that text back into a real array, and shrugs if it is unreadable
-// rather than crashing the page.
-function parseStoredList(value) {
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
 
 // The feedback page.
 export default async function ResultsPage() {
