@@ -105,9 +105,10 @@ in the first commit:
 ```
 4140ad1  Add InternPilot stages 1-4: landing, consent, Google sign-in,
          resume upload, feedback and file download
+5ea8c90  Add Stage 5 internship matching and the delete-account button
 ```
 
-47 files, 6072 lines.
+47 files and 6072 lines in the first; 18 files and 1328 insertions in the second.
 
 The habit from here is one commit per stage:
 
