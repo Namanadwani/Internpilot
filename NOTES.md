@@ -99,23 +99,39 @@ expected** — it is a scratchpad for trying tokens out.
 
 ## Git
 
-The repository was initialised on 13 October 2026. Everything through Stage 4 is
-in the first commit:
+The repository was initialised on 13 October 2026 and **pushed to GitHub on
+14 October 2026**: <https://github.com/Namanadwani/Internpilot> — **private**.
+Everything through Stage 4 is in the first commit:
 
 ```
 4140ad1  Add InternPilot stages 1-4: landing, consent, Google sign-in,
          resume upload, feedback and file download
 5ea8c90  Add Stage 5 internship matching and the delete-account button
+b8eb9b5  Add the environment checker script and record the Stage 5 commit
 ```
 
-47 files and 6072 lines in the first; 18 files and 1328 insertions in the second.
+47 files and 6072 lines in the first; 18 files and 1328 insertions in the second;
+2 files and 337 insertions in the third.
+
+**The repository is named `Internpilot`, with a capital I** — the folder on disk
+is lowercase. GitHub matches the two case-insensitively and redirects, so a
+lowercase remote URL does work, but it answers every push with "This repository
+moved". The remote is set to the canonical capitalised URL so that stops.
 
 The habit from here is one commit per stage:
 
 ```bash
 git add -A && git status --short    # look at what you are about to commit
 git commit -m "what you changed"
+git push                            # send it to GitHub
 ```
+
+**Pushing needs a login, once.** GitHub stopped accepting account passwords for
+git over HTTPS in 2021, so `git push` will refuse your normal password. This
+machine is set up with the GitHub CLI instead: `brew install gh`, then
+`gh auth login`, which authenticates **through a browser** and stores the result
+in the macOS Keychain. It asks once and never again, and there is no token to
+copy around or lose. On a new machine, those two commands are the whole setup.
 
 **What is NOT in git, and why it matters:**
 
@@ -124,6 +140,12 @@ git commit -m "what you changed"
 | `.env`, `.env.local` | They hold real keys | Clone the repo elsewhere and you must fetch the Google values and Anthropic key again |
 | `prisma/dev.db` | It holds real student data | **The database and every uploaded resume are not backed up by committing.** Git is not a backup for your data, only for your code |
 | `node_modules/` | Rebuilt by `npm install` | — |
+
+**Checked on 14 October 2026, from GitHub's side rather than this machine:**
+`git ls-files` lists 59 tracked files, `prisma/dev.db` is not one of them, and
+the repository's own file listing shows `.env.example` but no `.env` and no
+`.env.local`. A push sends only tracked files, so neither the keys nor the
+student data has ever left this computer.
 
 To restore the database on a new machine, run
 `npx prisma migrate dev --name init`. That rebuilds the empty tables. The rows
@@ -228,7 +250,8 @@ internpilot/
 │   └── matching.js            Scores an internship against a resume
 ├── scripts/
 │   ├── sync-internships.mjs   Fetches the feeds and fills the cache
-│   └── probe-boards.mjs       Describes each feed. Reads only, writes nothing
+│   ├── probe-boards.mjs       Describes each feed. Reads only, writes nothing
+│   └── check-env.mjs          Says which variables are set. Never prints a value
 ├── prisma/
 │   ├── schema.prisma          The database tables
 │   └── migrations/            The recipe for building them (committed)
@@ -236,6 +259,7 @@ internpilot/
 ├── .env / .env.local          Configuration and secrets — never committed
 ├── .env.example               Template — safe to commit
 ├── .gitignore
+├── README.md                  The short version; points here for the rest
 └── NOTES.md                   This file
 ```
 
@@ -490,10 +514,24 @@ when, and what came back.
   which is what the privacy policy promises. Still missing is the right to *take
   a copy* — there is no way to download your data before deleting it. The privacy
   policy must either promise that and have it built, or not promise it.
-- **The model name in `lib/ai.js` is a guess.** It was written without access to
-  the Anthropic documentation. If the feedback fails with a "model not found"
-  message, set `ANTHROPIC_MODEL` in `.env.local` to a model your account can
-  reach. The error message says exactly this.
+- **`ANTHROPIC_API_KEY` is not set anywhere, and the shell around it is a trap.**
+  Found on 14 October 2026 with `node scripts/check-env.mjs`. Two separate
+  things. First, the key is simply missing, so resume feedback fails with the
+  friendly "not switched on yet" message instead of calling anything. Second,
+  and worse, the shell exports `ANTHROPIC_BASE_URL` (pointing at
+  `agentrouter.org`, an unrelated third party) and `ANTHROPIC_AUTH_TOKEN`.
+  `lib/ai.js` passes only `apiKey`, so the Anthropic SDK fills in the other two
+  from the environment — which means **a real key added to `.env.local` today
+  would be transmitted to that third party, along with the student's entire
+  resume text.** Before Stage 7 uses a real key, either start the dev server
+  with those two variables unset, or pin `baseURL: "https://api.anthropic.com"`
+  explicitly in `lib/ai.js`. **Check a key with `node scripts/check-env.mjs`;
+  never paste one into a chat window to see whether it looks right.**
+- **The model name in `lib/ai.js` is `claude-sonnet-5-5`.** This entry used to
+  warn that the name was a guess written without the documentation. It was
+  checked on 14 October 2026 and it is a real, current model id — so a "model not
+  found" failure would now mean the key's account cannot reach that model, not
+  that the name is misspelt. `ANTHROPIC_MODEL` still overrides it.
 - 8 npm vulnerabilities (4 moderate, 4 high) reported by `npm audit` after
   Stages 3 and 4 added `unpdf`, `mammoth` and the Anthropic SDK. The count has
   risen as dependencies were added and has never been investigated in detail —
